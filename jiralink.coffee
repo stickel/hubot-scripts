@@ -21,7 +21,7 @@
 
 module.exports = (robot) ->
   # Regex to check `matches` against for IDs
-  idRegex = /([^\w\-]|^)(\w+-[0-9]+)(?=[^\w]|$)/i
+  idRegex = /(^|\s)(\w+-\d+)(?!\w)/i
   # Avoid repetition from these user names
   excludeFromResponses = ['Automated Process', 'JIRA', 'GitHub']
 
