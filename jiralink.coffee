@@ -21,34 +21,30 @@
 
 module.exports = (robot) ->
   # Regex to check `matches` against for IDs
-  idRegex = /(^|\s)(\w+-\d+)(?!\w)/i
+  idRegex = /(^|\s)((\w+[^\d])-(\d+(?!\w)))/ig
   # Avoid repetition from these user names
   excludeFromResponses = ['Automated Process', 'JIRA', 'GitHub']
+  # Array of rooms to exclude
+  excludeRooms = ['devops', 'devops_console']
+  user = process.env.JIRA_USERNAME
+  pass = process.env.JIRA_PASS
+  apiBaseUrl = "https://#{process.env.JIRA_SUBDOMAIN}.atlassian.net/rest/api/2/issue/"
+  auth = 'Basic ' + new Buffer(user + ':' + pass).toString('base64')
+
+  showTicket = (msg, ticket, cb) ->
+    msg.http(apiBaseUrl + ticket)
+      .headers(Authorization: auth, Accept: 'application/json')
+      .get() (err, res, body) ->
+        cb JSON.parse(body)
 
   robot.hear idRegex, (msg) ->
     # ignore messages from the exclusion list
     return if msg.message.user.name in excludeFromResponses
-    apiBaseUrl = "https://#{process.env.JIRA_SUBDOMAIN}.atlassian.net/rest/api/2/issue/"
+    # ignore messages in certain rooms
+    return if msg.message.room in excludeRooms
     ticketUrl = "https://#{process.env.JIRA_SUBDOMAIN}.atlassian.net/browse/"
-    user = process.env.JIRA_USERNAME
-    pass = process.env.JIRA_PASS
-    auth = 'Basic ' + new Buffer(user + ':' + pass).toString('base64')
 
-    # Gather all IDs from `msg.match.input` in case there are multiple
-    # IDs in a single message
-    matches = msg.match.input.split ' '
-
-    for m in matches
-      if m.match idRegex
-        # Query the Atlassian API for more info on each ticket
-        msg.http(apiBaseUrl + m)
-          .headers(Authorization: auth, Accept: 'application/json')
-          .get() (err, res, body) ->
-            try
-              json = JSON.parse(body)
-              # HipChat can't accept html messages yet, so send it formatted as:
-              # http://domain.atlassian.net/browse/TIK-1234: Title of ticket
-              msg.send ticketUrl + json.key + ': ' + json.fields.summary
-            catch error
-              # There was a problem fetching from the API, send the URL instead
-              msg.send ticketUrl + m
+    for matched in msg.match
+      ticket = (matched.match /(\w+-[0-9]+)/)[0]
+      showTicket msg, ticket, (text) ->
+        msg.send ticketUrl + text.key + ': ' + text.fields.summary
